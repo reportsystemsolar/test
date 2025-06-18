@@ -1469,6 +1469,7 @@
     </div>
 
     <script>
+        let imageFilesList = [];
         // متغیرهای لاگین
         let currentUser = null;
         const LOGIN_SHEET_URL = 'https://script.google.com/macros/s/AKfycbyMASE23XVAOYM5awfnG-T19rBtQcK0kZxmuiqaDizNlxzWCzip8JTCHQBt4ybr1gY/exec'; // آیدی اسکریپت لاگین
@@ -1838,7 +1839,7 @@
             });
             
             // Handle multiple images
-            const imageFiles = document.getElementById('siteImages').files;
+            const imageFiles = imageFilesList;
             if (imageFiles && imageFiles.length > 0) {
                 data.images = [];
                 const maxImages = Math.min(imageFiles.length, 2); // Changed to 2 as per your requirement
@@ -2253,65 +2254,59 @@
 
         // Add image preview handler for multiple images
         document.getElementById('siteImages').addEventListener('change', function(e) {
-            previewMultipleImages(e.target);
-        });
-        function removeImageAt(index) {
-            const input = document.getElementById('siteImages');
-            const dt = new DataTransfer();
-            Array.from(input.files)
-                .forEach((file, i) => { if (i !== index) dt.items.add(file) });
-            input.files = dt.files;
-            previewMultipleImages(input);
-        }
-
-        function previewMultipleImages(input) {
-            const preview = document.getElementById('imagePreview');
-            preview.innerHTML = '';
-            
-            if (input.files && input.files.length > 0) {
-                // Limit to 2 images as per your requirement
-                const maxImages = Math.min(input.files.length, 2);
-                
-                for (let i = 0; i < maxImages; i++) {
-                    const file = input.files[i];
-                    const reader = new FileReader();
-                    
-                    reader.onload = function(e) {
-                       // container for img + delete btn
-                        const imgContainer = document.createElement('div');
-                        imgContainer.className = 'img-container';
-                        imgContainer.style.width = '100%';
-                        imgContainer.style.height = '150px';
-                        imgContainer.style.overflow = 'hidden';
-                        imgContainer.style.borderRadius = '8px';
-                        imgContainer.style.border = '1px solid #e2e8f0';
-
-                        // the image itself
-                        const img = document.createElement('img');
-                        img.src = e.target.result;
-                        img.style.width = '100%';
-                        img.style.height = '150px';
-                        img.style.objectFit = 'cover';
-                        imgContainer.appendChild(img);
-
-                        // delete button
-                        const del = document.createElement('button');
-                        del.className = 'delete-btn';
-                        del.textContent = '×';
-                        del.addEventListener('click', () => removeImageAt(i));
-                        imgContainer.appendChild(del);
-
-                        preview.appendChild(imgContainer);
-
-                    }
-                    reader.readAsDataURL(file);
-                }
-                
-                if (input.files.length > 2) {
-                    showMessage('فقط 2 تصویر اول آپلود خواهند شد', 'info');
+            for (let i = 0; i < e.target.files.length; i++) {
+                if (imageFilesList.length < 2) {
+                    imageFilesList.push(e.target.files[i]);
                 }
             }
+            previewMultipleImages();
+            // ریست input تا بتونه دوباره همون فایل رو انتخاب کنه
+            e.target.value = null;
+        });
+
+        function removeImageAt(index) {
+            imageFilesList.splice(index, 1);
+            previewMultipleImages();
         }
+
+        function previewMultipleImages() {
+            const preview = document.getElementById('imagePreview');
+            preview.innerHTML = '';
+
+            imageFilesList.slice(0, 2).forEach((file, i) => {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const imgContainer = document.createElement('div');
+                    imgContainer.className = 'img-container';
+                    imgContainer.style.width = '100%';
+                    imgContainer.style.height = '150px';
+                    imgContainer.style.overflow = 'hidden';
+                    imgContainer.style.borderRadius = '8px';
+                    imgContainer.style.border = '1px solid #e2e8f0';
+
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.style.width = '100%';
+                    img.style.height = '150px';
+                    img.style.objectFit = 'cover';
+                    imgContainer.appendChild(img);
+
+                    const del = document.createElement('button');
+                    del.className = 'delete-btn';
+                    del.textContent = '×';
+                    del.addEventListener('click', () => removeImageAt(i));
+                    imgContainer.appendChild(del);
+
+                    preview.appendChild(imgContainer);
+                };
+                reader.readAsDataURL(file);
+            });
+
+            if (imageFilesList.length > 2) {
+                showMessage('فقط ۲ تصویر اول آپلود خواهند شد', 'info');
+            }
+        }
+
 
     </script>
 </body>
