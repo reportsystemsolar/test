@@ -1944,10 +1944,14 @@
                 field.required = false;
                 field.value = '';
             });
+
+            // Delete Image input 
             // clear the preview panel
             document.getElementById('imagePreview').innerHTML = '';
             // reset the file input
             document.getElementById('siteImages').value = '';
+            imageFilesList = [];
+            // previewMultipleImages();
 
             
             // نمایش صفحه اصلی
@@ -2122,6 +2126,7 @@
                 });
                 console.log(response)
                 // نمایش صفحه موفقیت
+                
                 showSuccessPage();
                 
                 // فراخوانی آسنکرون اسکریپت دوم در پس‌زمینه
