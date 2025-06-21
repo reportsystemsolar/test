@@ -1486,6 +1486,9 @@
                     <div class="form-group">
                         <label for="siteImages">انتخاب تصاویر (حداکثر ۵ تصویر):</label>
                         <input type="file" id="siteImages" name="siteImages" accept="image/*" multiple>
+                        <small style="color: #6b7280; font-size: 0.75rem; margin-top: 4px; display: block;">
+                            💡 توجه: تصاویر بزرگتر از ۵ مگابایت لطفاً در ایتا ارسال کنید
+                        </small>
                         <div id="imagePreview" style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;"></div>
                     </div>
                 </div>
@@ -1859,13 +1862,51 @@
                 messageDiv.style.display = 'none';
             }, 10000);
         }
+
+        // تابع فشرده‌سازی تصویر
+        function compressImage(file, quality = 0.7, maxWidth = 1200) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = function() {
+                    // محاسبه ابعاد جدید
+                    let { width, height } = img;
+                    
+                    if (width > maxWidth) {
+                        height = (height * maxWidth) / width;
+                        width = maxWidth;
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    // رسم تصویر فشرده شده
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // تبدیل به blob با کیفیت کمتر
+                    canvas.toBlob(resolve, 'image/jpeg', quality);
+                };
+                
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
         // Add this helper function to convert file to base64
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = error => reject(error);
+        async function fileToBase64(file) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    // فشرده‌سازی قبل از تبدیل به base64
+                    const compressedFile = await compressImage(file, 0.7, 1200);
+                    
+                    const reader = new FileReader();
+                    reader.readAsDataURL(compressedFile);
+                    reader.onload = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = error => reject(error);
+                } catch (error) {
+                    reject(error);
+                }
             });
         }
 
@@ -2402,41 +2443,194 @@
         });
 
         // Add image preview handler for multiple images
-       document.getElementById('siteImages').addEventListener('change', function(e) {
-        const selectedFiles = Array.from(e.target.files);
-        
-        // بررسی حداکثر تعداد مجاز
-        const remainingSlots = 5 - imageFilesList.length;
-        
-        if (selectedFiles.length > remainingSlots) {
-            showMessage(`شما می‌توانید حداکثر ${remainingSlots} تصویر دیگر اضافه کنید.`, 'error');
+        document.getElementById('siteImages').addEventListener('change', function(e) {
+            const selectedFiles = Array.from(e.target.files);
+            const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 مگابایت به بایت
             
-            // اضافه کردن فقط تعداد مجاز
-            const filesToAdd = selectedFiles.slice(0, remainingSlots);
-            imageFilesList.push(...filesToAdd);
-        } else {
-            // اضافه کردن تمام فایل‌های انتخاب شده
-            imageFilesList.push(...selectedFiles);
-        }
-        
-        previewMultipleImages();
-        
-        // ریست input تا بتونه دوباره همون فایل رو انتخاب کنه
-        e.target.value = '';
-        
-        // نمایش پیام تایید
-        if (selectedFiles.length > 0) {
-            const addedCount = Math.min(selectedFiles.length, remainingSlots);
-            showMessage(`${addedCount} تصویر با موفقیت اضافه شد.`, 'success');
-        }
-    });
-
+            // بررسی حجم فایل‌ها
+            const validFiles = [];
+            const invalidFiles = [];
+            
+            selectedFiles.forEach(file => {
+                if (file.size > MAX_FILE_SIZE) {
+                    invalidFiles.push({
+                        name: file.name,
+                        size: formatFileSize(file.size)
+                    });
+                } else {
+                    validFiles.push(file);
+                }
+            });
+            
+            // نمایش پاپ‌اپ خطا برای فایل‌های بزرگ
+            if (invalidFiles.length > 0) {
+                showLargeFilePopup(invalidFiles);
+            }
+            
+            // ادامه پردازش با فایل‌های معتبر
+            if (validFiles.length === 0) {
+                // ریست input
+                e.target.value = '';
+                return;
+            }
+            
+            // بررسی حداکثر تعداد مجاز
+            const remainingSlots = 5 - imageFilesList.length;
+            
+            if (validFiles.length > remainingSlots) {
+                showMessage(`شما می‌توانید حداکثر ${remainingSlots} تصویر دیگر اضافه کنید.`, 'error');
+                
+                // اضافه کردن فقط تعداد مجاز از فایل‌های معتبر
+                const filesToAdd = validFiles.slice(0, remainingSlots);
+                imageFilesList.push(...filesToAdd);
+            } else {
+                // اضافه کردن تمام فایل‌های معتبر
+                imageFilesList.push(...validFiles);
+            }
+            
+            previewMultipleImages();
+            
+            // ریست input تا بتونه دوباره همون فایل رو انتخاب کنه
+            e.target.value = '';
+            
+            // نمایش پیام تایید برای فایل‌های معتبر
+            if (validFiles.length > 0) {
+                const addedCount = Math.min(validFiles.length, remainingSlots);
+                showMessage(`✅ ${addedCount} تصویر با موفقیت اضافه شد.`, 'success');
+            }
+        });
         function removeImageAt(index) {
             imageFilesList.splice(index, 1);
             previewMultipleImages();
             
             // نمایش پیام تایید حذف
             showMessage('تصویر با موفقیت حذف شد.', 'info');
+        }
+
+        // تابع کمکی برای تبدیل بایت به فرمت قابل خواندن
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }   
+
+        // تابع نمایش پاپ‌اپ برای فایل‌های بزرگ
+        function showLargeFilePopup(invalidFiles) {
+            const popup = document.createElement('div');
+            popup.id = 'largeFilePopup';
+            
+            const filesList = invalidFiles.map(file => 
+                `<li style="margin: 8px 0; padding: 8px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #ef4444;">
+                    <strong>${file.name.length > 25 ? file.name.substring(0, 25) + '...' : file.name}</strong>
+                    <br><small style="color: #991b1b;">حجم: ${file.size}</small>
+                </li>`
+            ).join('');
+            
+            popup.innerHTML = `
+                <div style="
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.6);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 10000;
+                    backdrop-filter: blur(5px);
+                ">
+                    <div style="
+                        background: white;
+                        border-radius: 12px;
+                        padding: 32px;
+                        max-width: 500px;
+                        width: 90%;
+                        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+                        text-align: center;
+                        font-family: 'Segoe UI', 'Tahoma', 'Arial', sans-serif;
+                        max-height: 80vh;
+                        overflow-y: auto;
+                    ">
+                        <div style="font-size: 3rem; margin-bottom: 16px;">⚠️</div>
+                        <h3 style="color: #dc2626; margin-bottom: 16px; font-size: 1.25rem;">حجم فایل بیش از حد مجاز</h3>
+                        
+                        <p style="color: #374151; margin-bottom: 20px; line-height: 1.6;">
+                            تصاویر زیر بیشتر از ۵ مگابایت هستند و نمی‌توانند آپلود شوند:
+                        </p>
+                        
+                        <ul style="
+                            list-style: none;
+                            padding: 0;
+                            margin: 20px 0;
+                            text-align: right;
+                            max-height: 200px;
+                            overflow-y: auto;
+                            border: 1px solid #e5e7eb;
+                            border-radius: 8px;
+                            padding: 12px;
+                        ">
+                            ${filesList}
+                        </ul>
+                        
+                        <div style="
+                            background: #eff6ff;
+                            border: 1px solid #bfdbfe;
+                            border-radius: 8px;
+                            padding: 16px;
+                            margin: 20px 0;
+                            text-align: right;
+                        ">
+                            <p style="color: #1e40af; margin: 0; font-size: 0.875rem; line-height: 1.5;">
+                                💡 <strong>راه حل:</strong><br>
+                                • تصاویر را فشرده کنید یا در اندازه کوچک‌تر ذخیره کنید<br>
+                                • یا این تصاویر را در <strong>ایتا</strong> ارسال بفرمایید
+                            </p>
+                        </div>
+                        
+                        <button id="closeLargeFilePopup" style="
+                            background: #dc2626;
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            padding: 12px 24px;
+                            font-size: 0.875rem;
+                            cursor: pointer;
+                            font-weight: 500;
+                            transition: background-color 0.2s ease;
+                            margin-top: 16px;
+                        ">
+                            متوجه شدم
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(popup);
+            
+            // اضافه کردن event listener برای بستن پاپ‌اپ
+            document.getElementById('closeLargeFilePopup').addEventListener('click', function() {
+                document.body.removeChild(popup);
+            });
+            
+            // بستن پاپ‌اپ با کلیک روی background
+            popup.addEventListener('click', function(e) {
+                if (e.target === popup) {
+                    document.body.removeChild(popup);
+                }
+            });
+            
+            // بستن پاپ‌اپ با کلید Escape
+            document.addEventListener('keydown', function escapeHandler(e) {
+                if (e.key === 'Escape') {
+                    if (document.getElementById('largeFilePopup')) {
+                        document.body.removeChild(popup);
+                    }
+                    document.removeEventListener('keydown', escapeHandler);
+                }
+            });
         }
 
         function previewMultipleImages() {
@@ -2528,21 +2722,24 @@
                     deleteBtn.addEventListener('click', () => removeImageAt(i));
                     imgContainer.appendChild(deleteBtn);
 
-                    // نام فایل
-                    const fileName = document.createElement('div');
-                    fileName.textContent = file.name.length > 15 ? file.name.substring(0, 15) + '...' : file.name;
-                    fileName.style.cssText = `
+                    // نام فایل و حجم
+                    const fileInfo = document.createElement('div');
+                    const fileName = file.name.length > 12 ? file.name.substring(0, 12) + '...' : file.name;
+                    const fileSize = formatFileSize(file.size);
+                    fileInfo.innerHTML = `${fileName}<br><small>${fileSize}</small>`;
+                    fileInfo.style.cssText = `
                         position: absolute;
                         bottom: 0;
                         left: 0;
                         right: 0;
-                        background: rgba(0,0,0,0.7);
+                        background: rgba(0,0,0,0.8);
                         color: white;
-                        padding: 4px 8px;
-                        font-size: 11px;
+                        padding: 6px 8px;
+                        font-size: 10px;
                         text-align: center;
+                        line-height: 1.2;
                     `;
-                    imgContainer.appendChild(fileName);
+                    imgContainer.appendChild(fileInfo);
 
                     preview.appendChild(imgContainer);
                 };
